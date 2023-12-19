@@ -734,7 +734,7 @@ class AjaxDatatableView(View):
                 "data": objects,
                 }
 
-    def get_table_row_id(self, request, obj):
+    def get_table_row_id(self, request, obj, i):  # pylint: disable=unused-argument
         """
         Provides a specific ID for the table row; default: "row-ID"
         Override to customize as required.
@@ -742,12 +742,20 @@ class AjaxDatatableView(View):
         Do to a limitation of datatables.net, we can only supply to table rows
         a id="row-ID" attribute, and not a data-row-id="ID" attribute
         """
-        result = ''
+        result = ""
         if self.table_row_id_fieldname:
-            try:
-                result = self.table_row_id_prefix + str(getattr(obj, self.table_row_id_fieldname))
-            except AttributeError:
-                result = ''
+            if isinstance(obj, dict):
+                try:
+                    result = self.table_row_id_prefix + str(i + 1)
+                except AttributeError:
+                    result = ""
+            else:
+                try:
+                    result = self.table_row_id_prefix + str(
+                        getattr(obj, self.table_row_id_fieldname)
+                    )
+                except AttributeError:
+                    result = ""
         return result
 
     def customize_row(self, row, obj):
@@ -836,9 +844,16 @@ class AjaxDatatableView(View):
         return qs
 
     def sort_queryset(self, params, qs):
-        if len(params['orders']):
-            qs = qs.order_by(
-                *[order.get_order_mode() for order in params['orders']])
+        """
+        Override the sorting if the instance of qs in dictionary
+        """
+        if len(params["orders"]):
+            if isinstance(qs, list):
+                field = str(params["orders"][0]).split(": ", maxsplit=1)[0]
+                reverse = str(params["orders"][0]).split(": ")[1].upper() == "DESC"
+                qs = sorted(qs, key=lambda x: str(x[field]), reverse=reverse)
+            else:
+                qs = qs.order_by(*[order.get_order_mode() for order in params["orders"]])
         return qs
 
     # TODO: currently unused; in the orginal project was probably related to the
@@ -857,6 +872,17 @@ class AjaxDatatableView(View):
         return Q(**{column + '__in': matching_choices})
 
     def _filter_queryset(self, column_names, search_value, qs, global_filtering):
+        
+        if isinstance(qs, list):
+            search_value_lower = search_value.lower()
+            filtered_queryset = [
+                query_instance
+                for query_instance in qs
+                if isinstance(query_instance, dict)
+                and search_value_lower
+                in "".join(str(ele) for ele in query_instance.values()).lower()
+            ]
+            return filtered_queryset
 
         if TEST_FILTERS:
             trace(

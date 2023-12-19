@@ -655,6 +655,11 @@ class AjaxDatatableView(View):
         # return self.model_columns[column].render_column(row)
         value = self.column_obj(column).render_column(row)
         return value
+    
+    def render_dict_column(self, row, column):
+        """This function is responsible for assigning values to the respective
+        columns in a row"""
+        return row.get(column, None)
 
     def render_clip_value_as_html(self, long_text, short_text, is_clipped):
         """
@@ -697,12 +702,20 @@ class AjaxDatatableView(View):
             retdict[name] = self.clip_value(str(retdict[name]), max_length, True)
 
     def prepare_results(self, request, qs):
+        """This function is responsible for preparing the json data which
+        should be returned as response when the datatable is called
+        """
         json_data = []
-        columns = [c['name'] for c in self.column_specs]
-        for cur_object in qs:
+        columns = [c["name"] for c in self.column_specs]
+        if len(qs) > 0 and isinstance(qs[0], dict):
+            func = getattr(self, "render_dict_column")
+        else:
+            func = getattr(self, "render_column")
+        for i, cur_object in enumerate(qs):
             retdict = {
-                # fieldname: '<div class="field-%s">%s</div>' % (fieldname, self.render_column(cur_object, fieldname))
-                fieldname: self.render_column(cur_object, fieldname)
+                # fieldname: '<div class="field-%s">%s</div>'
+                # % (fieldname, self.render_column(cur_object, fieldname))
+                fieldname: func(cur_object, fieldname)
                 for fieldname in columns
                 if fieldname
             }
@@ -710,14 +723,16 @@ class AjaxDatatableView(View):
             self.customize_row(retdict, cur_object)
             self.clip_results(retdict)
 
-            row_id = self.get_table_row_id(request, cur_object)
+            row_id = self.get_table_row_id(request, cur_object, i)
+
             if row_id:
                 # "Automatic addition of row ID attributes"
                 # https://datatables.net/examples/server_side/ids.html
-                retdict['DT_RowId'] = row_id
+                retdict["DT_RowId"] = row_id
 
             json_data.append(retdict)
         return json_data
+
 
     def get_response_dict(self, request, paginator, draw_idx, start_pos):
         page_id = (start_pos // paginator.per_page) + 1

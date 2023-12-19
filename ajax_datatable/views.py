@@ -780,6 +780,9 @@ class AjaxDatatableView(View):
 
     def optimize_queryset(self, qs):
 
+        if isinstance(qs, list):
+            return qs
+
         # use sets to remove duplicates
         only = set()
         select_related = set()
